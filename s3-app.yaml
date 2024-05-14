@@ -44,7 +44,7 @@ metadata:
 spec:
   containers:
     - name: app
-      image: nginx
+      image: nginx:1.25-alpine3.18
       ports:
         - containerPort: 80
       volumeMounts:
