@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: html-config
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Simple App</title>
+    </head>
+    <body>
+        <h1>Welcome to the Simple App</h1>
+        <img src="/data/image.jpg" alt="Sample Image">
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html;
+        }
+
+        location /data/ {
+            alias /data/;
+        }
+    }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: s3-app
+  labels:
+    app: s3-app
+spec:
+  containers:
+    - name: app
+      image: nginx
+      ports:
+        - containerPort: 80
+      volumeMounts:
+        - name: persistent-storage
+          mountPath: /data
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        - name: html-config
+          mountPath: /usr/share/nginx/html/index.html
+          subPath: index.html
+  volumes:
+    - name: persistent-storage
+      persistentVolumeClaim:
+        claimName: s3-claim
+    - name: nginx-config
+      configMap:
+        name: nginx-config
+    - name: html-config
+      configMap:
+        name: html-config
+---
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: s3-app
+#   labels:
+#     app: s3-app
+# spec:
+#   containers:
+#     - name: app
+#       image: nginx
+#       ports:
+#       - containerPort: 80
+#       volumeMounts:
+#         - name: persistent-storage
+#           mountPath: /data
+#   volumes:
+#     - name: persistent-storage
+#       persistentVolumeClaim:
+#         claimName: s3-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3-svc
+spec:
+  selector:
+    app: s3-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: workloads-internet-alb
+    alb.ingress.kubernetes.io/load-balancer-name: workloads-internet-alb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: s3-svc
+            port:
+              number: 80
