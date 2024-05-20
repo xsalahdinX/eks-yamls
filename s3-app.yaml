@@ -22,13 +22,22 @@ metadata:
 data:
   default.conf: |
     server {
-        listen 80;
+        listen 8080;
         server_name localhost;
 
         location / {
             root   /usr/share/nginx/html;
             index  index.html;
         }
+        # location /data {
+        #     root   /data;
+        #     index  data.html;
+        # }
+
+        # location /hi {
+        #     root   /hi;
+        #     index  hi.html;
+        # }
 
         location /data/ {
             alias /data/;
@@ -42,11 +51,18 @@ metadata:
   labels:
     app: s3-app
 spec:
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault # enable seccomp and the runtimes default profile
+    runAsUser: 1000 # hardcode user to non-root if not set in Dockerfile
+    runAsGroup: 1000 # hardcode group to non-root if not set in Dockerfile
+    fsGroup: 1000
+    runAsNonRoot: true # hardcode to non-root. Redundant to above if Dockerfile is set USER 1000
   containers:
     - name: app
-      image: nginx:1.25-alpine3.18
+      image: salahdindevops/nginx:2.0
       ports:
-        - containerPort: 80
+        - containerPort: 8080
       volumeMounts:
         - name: persistent-storage
           mountPath: /data
@@ -56,6 +72,9 @@ spec:
         - name: html-config
           mountPath: /usr/share/nginx/html/index.html
           subPath: index.html
+        # - name: html-config
+        #   mountPath: /hi/hi.html
+        #   subPath: hi.html
   volumes:
     - name: persistent-storage
       persistentVolumeClaim:
@@ -67,26 +86,6 @@ spec:
       configMap:
         name: html-config
 ---
-# apiVersion: v1
-# kind: Pod
-# metadata:
-#   name: s3-app
-#   labels:
-#     app: s3-app
-# spec:
-#   containers:
-#     - name: app
-#       image: nginx
-#       ports:
-#       - containerPort: 80
-#       volumeMounts:
-#         - name: persistent-storage
-#           mountPath: /data
-#   volumes:
-#     - name: persistent-storage
-#       persistentVolumeClaim:
-#         claimName: s3-claim
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -97,7 +96,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 80
+      targetPort: 8080
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
